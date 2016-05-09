@@ -34,6 +34,9 @@ Pod::Spec.new do |s|
   s.exclude_files = 'objectivec/GPBProtocolBuffers.m'
   s.header_mappings_dir = 'objectivec'
 
+  # Set a CPP symbol so the code knows to use framework imports.
+  s.user_target_xcconfig = { 'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) GPB_USE_PROTOBUF_FRAMEWORK_IMPORTS=1' }
+
   s.ios.deployment_target = '7.1'
   s.osx.deployment_target = '10.9'
   s.requires_arc = false

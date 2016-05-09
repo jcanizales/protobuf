@@ -66,10 +66,16 @@ class FileGenerator {
 
   bool IsPublicDependency() const { return is_public_dep_; }
 
+  bool IsProtobufLibraryBundledProto() const {
+    return IsProtobufLibraryBundledProtoFile(file_);
+  }
+
  protected:
   void SetIsPublicDependency(bool is_public_dep) {
     is_public_dep_ = is_public_dep;
   }
+
+  void PrintHeaderImport(io::Printer *printer);
 
  private:
   const FileDescriptor* file_;

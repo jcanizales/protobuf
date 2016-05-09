@@ -88,9 +88,23 @@ void FileGenerator::GenerateHeader(io::Printer *printer) {
       "\n",
       "filename", file_->name());
 
+  const string framework_name(ProtobufLibraryFrameworkName);
+  const string cpp_symbol(ProtobufFrameworkImportSymbol(framework_name));
   printer->Print(
-      "#import \"GPBProtocolBuffers.h\"\n"
-      "\n");
+      "// This CPP symbol can be defined to use imports that match up to the framework\n"
+      "// imports needed when using CocoaPods.\n"
+      "#if !defined($cpp_symbol$)\n"
+      " #define $cpp_symbol$ 0\n"
+      "#endif\n"
+      "\n"
+      "#if $cpp_symbol$\n"
+      " #import <$framework_name$/GPBProtocolBuffers.h>\n"
+      "#else\n"
+      " #import \"GPBProtocolBuffers.h\"\n"
+      "#endif\n"
+      "\n",
+      "framework_name", framework_name,
+      "cpp_symbol", cpp_symbol);
 
   // Add some verification that the generated code matches the source the
   // code is being compiled with.
@@ -102,13 +116,13 @@ void FileGenerator::GenerateHeader(io::Printer *printer) {
       "protoc_gen_objc_version",
       SimpleItoa(GOOGLE_PROTOBUF_OBJC_GEN_VERSION));
 
+  // #import any headers for "public imports" in the proto file.
   const vector<FileGenerator *> &dependency_generators = DependencyGenerators();
   for (vector<FileGenerator *>::const_iterator iter =
            dependency_generators.begin();
        iter != dependency_generators.end(); ++iter) {
     if ((*iter)->IsPublicDependency()) {
-      printer->Print("#import \"$header$.pbobjc.h\"\n",
-                     "header", (*iter)->Path());
+      (*iter)->PrintHeaderImport(printer);
     }
   }
 
@@ -204,19 +218,52 @@ void FileGenerator::GenerateSource(io::Printer *printer) {
       "\n",
       "filename", file_->name());
 
-  string header_file = Path() + ".pbobjc.h";
+  // #import the runtime support.
+  if (IsProtobufLibraryBundledProto()) {
+    // Generating something shipped within the protobuf library, won't need
+    // a framework import.
+    printer->Print(
+        "#import \"GPBProtocolBuffers_RuntimeSupport.h\"\n");
+  } else {
+    const string framework_name(ProtobufLibraryFrameworkName);
+    const string cpp_symbol(ProtobufFrameworkImportSymbol(framework_name));
+    printer->Print(
+        "#if $cpp_symbol$\n"
+        " #import <$framework_name$/GPBProtocolBuffers_RuntimeSupport.h>\n"
+        "#else\n"
+        " #import \"GPBProtocolBuffers_RuntimeSupport.h\"\n"
+        "#endif\n",
+        "framework_name", framework_name,
+        "cpp_symbol", cpp_symbol);
+  }
+
+  // #import the header for this proto file.
   printer->Print(
-      "#import \"GPBProtocolBuffers_RuntimeSupport.h\"\n"
-      "#import \"$header_file$\"\n",
-      "header_file", header_file);
+      "#import \"$header_file$.pbobjc.h\"\n",
+      "header_file", Path());
+
+  // #import the headers for anything that a plain dependency of this proto
+  // file (that means they were just an include, not a "public" include).
   const vector<FileGenerator *> &dependency_generators =
       DependencyGenerators();
+  bool isProtobufLibraryBundledProto = IsProtobufLibraryBundledProto();
   for (vector<FileGenerator *>::const_iterator iter =
            dependency_generators.begin();
        iter != dependency_generators.end(); ++iter) {
     if (!(*iter)->IsPublicDependency()) {
-      printer->Print("#import \"$header$.pbobjc.h\"\n",
-                     "header", (*iter)->Path());
+      if (isProtobufLibraryBundledProto) {
+        // Generating proto for the library, anything it references should also
+        // be a proto in the library.
+        assert((*iter)->IsProtobufLibraryBundledProto());
+        // When generating the source for a proto shipped with the library, no
+        // need for that protos .m file to need to pulse framework based import
+        // so just generate the import.
+        printer->Print(
+            "#import \"$full_header_path$.pbobjc.h\"\n",
+            "full_header_path", (*iter)->Path());
+      } else {
+        (*iter)->PrintHeaderImport(printer);
+      }
     }
   }
   printer->Print(
@@ -357,6 +404,27 @@ void FileGenerator::GenerateSource(io::Printer *printer) {
 }
 
 const string FileGenerator::Path() const { return FilePath(file_); }
+
+void FileGenerator::PrintHeaderImport(io::Printer *printer) {
+  if (IsProtobufLibraryBundledProto()) {
+    const string framework_name(ProtobufLibraryFrameworkName);
+    map<string, string> vars;
+    vars["framework_name"] = ProtobufLibraryFrameworkName;
+    vars["cpp_symbol"] = ProtobufFrameworkImportSymbol(framework_name);
+    vars["full_header_path"] = Path();
+    vars["header_basename"] = FilePathBasename(file_);
+    printer->Print(vars,
+        "#if $cpp_symbol$\n"
+        " #import <$framework_name$/$header_basename$.pbobjc.h>\n"
+        "#else\n"
+        " #import \"$full_header_path$.pbobjc.h\"\n"
+        "#endif\n");
+  } else {
+    printer->Print(
+        "#import \"$full_header_path$.pbobjc.h\"\n",
+        "full_header_path", Path());
+  }
+}
 
 const vector<FileGenerator *> &FileGenerator::DependencyGenerators() {
   if (file_->dependency_count() != dependency_generators_.size()) {
