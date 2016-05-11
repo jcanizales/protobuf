@@ -36,13 +36,13 @@
  #define GPB_USE_PROTOBUF_FRAMEWORK_IMPORTS 0
 #endif
 
-#if GPB_USE_PROTOBUF_FRAMEWORK_IMPORTS
- #import <Protobuf/Duration.pbobjc.h>
- #import <Protobuf/Timestamp.pbobjc.h>
-#else
+// #if GPB_USE_PROTOBUF_FRAMEWORK_IMPORTS
+//  #import <Protobuf/google/protobuf/Duration.pbobjc.h>
+//  #import <Protobuf/google/protobuf/Timestamp.pbobjc.h>
+// #else
  #import "google/protobuf/Duration.pbobjc.h"
  #import "google/protobuf/Timestamp.pbobjc.h"
-#endif
+// #endif
 
 NS_ASSUME_NONNULL_BEGIN
 
